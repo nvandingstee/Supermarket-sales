@@ -1,0 +1,54 @@
+import requests
+import sqlite3
+
+# 🔹 Stap 1: JSON ophalen
+url = "https://www.ah.nl/service/rest/delegate?url=/bonus"
+response = requests.get(url)
+data = response.json()
+
+# 🔹 Stap 2: Extract aanbiedingen (productnamen + extra info)
+items = []
+ingredienten_lijst = []
+
+for card in data.get("cards", []):
+    content = card.get("properties", {})
+    
+    productnaam = content.get("title", "").strip()
+    omschrijving = content.get("subtitle", "").strip()
+    prijs = content.get("priceLabel", {}).get("now", "").strip()
+    geldig_tot = content.get("availabilityLabel", "").strip()
+    
+    if productnaam:  # Alleen toevoegen als er echt een naam is
+        items.append((productnaam, omschrijving, prijs, geldig_tot))
+        ingredienten_lijst.append(productnaam)
+
+# 🔹 Stap 3: Database aanmaken + vullen
+conn = sqlite3.connect("ah_bonus.db")
+c = conn.cursor()
+
+c.execute("""
+CREATE TABLE IF NOT EXISTS aanbiedingen (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    productnaam TEXT,
+    omschrijving TEXT,
+    prijs TEXT,
+    geldig_tot TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+""")
+
+c.executemany("""
+INSERT INTO aanbiedingen (productnaam, omschrijving, prijs, geldig_tot)
+VALUES (?, ?, ?, ?)
+""", items)
+
+conn.commit()
+conn.close()
+
+# 🔹 Stap 4: Print lijst met ingrediënten
+print("📋 Ingrediënten in de aanbieding:")
+for i, naam in enumerate(ingredienten_lijst, 1):
+    print(f"{i}. {naam}")
+
+# Indien je ze in een variabele wilt houden voor AI:
+print("\nIngredientenlijst voor AI:", ingredienten_lijst)
